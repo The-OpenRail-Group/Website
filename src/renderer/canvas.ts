@@ -719,7 +719,7 @@ export class Renderer {
                 (train.position.worldPos.x - worldPos.x) ** 2 +
                 (train.position.worldPos.y - worldPos.y) ** 2
             );
-            if (dist < 25 / this.camera.zoom) {
+            if (dist < Math.max(30, 40 / this.camera.zoom)) {
                 return { type: 'train', id };
             }
         }
@@ -730,7 +730,7 @@ export class Renderer {
                 (signal.position.x - worldPos.x) ** 2 +
                 (signal.position.y - worldPos.y) ** 2
             );
-            if (dist < 15 / this.camera.zoom) {
+            if (dist < Math.max(25, 35 / this.camera.zoom)) {
                 return { type: 'signal', id };
             }
         }
@@ -743,7 +743,7 @@ export class Renderer {
                 (node.position.x - worldPos.x) ** 2 +
                 (node.position.y - worldPos.y) ** 2
             );
-            if (dist < 15 / this.camera.zoom) {
+            if (dist < Math.max(25, 35 / this.camera.zoom)) {
                 return { type: 'points', id };
             }
         }
@@ -754,7 +754,7 @@ export class Renderer {
                 (station.position.x - worldPos.x) ** 2 +
                 (station.position.y - worldPos.y) ** 2
             );
-            if (dist < 40 / this.camera.zoom) {
+            if (dist < Math.max(45, 60 / this.camera.zoom)) {
                 return { type: 'station', id };
             }
         }

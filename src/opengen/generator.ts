@@ -216,33 +216,33 @@ function getWorldParams(difficulty: Difficulty, rng: SeededRNG): WorldParams {
     switch (difficulty) {
         case Difficulty.EASY:
             return {
-                stationCount: rng.int(3, 4),
+                stationCount: rng.int(6, 8),
                 branchProbability: 0.2,
                 loopProbability: 0.1,
                 trainsPerStation: 0.8,
                 maxPlatforms: 2,
                 freightRatio: 0.1,
-                segmentSpacing: 500,
+                segmentSpacing: 800,
             };
         case Difficulty.NORMAL:
             return {
-                stationCount: rng.int(4, 6),
+                stationCount: rng.int(8, 12),
                 branchProbability: 0.4,
                 loopProbability: 0.2,
                 trainsPerStation: 1.2,
                 maxPlatforms: 3,
                 freightRatio: 0.2,
-                segmentSpacing: 400,
+                segmentSpacing: 700,
             };
         case Difficulty.HARD:
             return {
-                stationCount: rng.int(5, 8),
+                stationCount: rng.int(10, 16),
                 branchProbability: 0.5,
                 loopProbability: 0.3,
                 trainsPerStation: 1.5,
                 maxPlatforms: 4,
                 freightRatio: 0.3,
-                segmentSpacing: 350,
+                segmentSpacing: 600,
             };
     }
 }
