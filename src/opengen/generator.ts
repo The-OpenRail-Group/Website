@@ -29,6 +29,7 @@ import {
     TrainType, TrainState, Difficulty, FailureType, Failure,
     ERUUnit, ERUState, Task, PointsRequirement,
     TimetableEntry, TrainPosition, TrainPathSegment,
+    Portal, SpawnSchedule,
 } from '../engine/types';
 import { SeededRNG, parseSeed, OPENGEN_VERSION } from './seed';
 
@@ -260,6 +261,8 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
     const routes = new Map<EntityId, Route>();
     const trains = new Map<EntityId, Train>();
     const stations = new Map<EntityId, Station>();
+    const portals = new Map<EntityId, Portal>();
+    const schedule: SpawnSchedule[] = [];
     const failures = new Map<EntityId, Failure>();
     const eruUnits: ERUUnit[] = [];
     const tasks: Task[] = [];
@@ -999,6 +1002,30 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
     }
 
     // ──────────────────────────────────────────
+    // STEP 8.5: Create Exit Portals
+    // ──────────────────────────────────────────
+
+    const lastLayout = stationLayouts[stationLayouts.length - 1];
+    const eastPortalNode: TrackNode = { id: genId('node'), position: vec2Add(lastLayout.exitNode.position, vec2(300, 0)), connectedSegments: [] };
+    const eastPortalSeg: TrackSegment = {
+        id: genId('seg'), startNodeId: lastLayout.exitNode.id, endNodeId: eastPortalNode.id,
+        length: 300, speedLimit: 80, waypoints: [], blockIds: [], isPlatform: false, electrified: true
+    };
+    eastPortalNode.connectedSegments.push(eastPortalSeg.id);
+    lastLayout.exitNode.connectedSegments.push(eastPortalSeg.id);
+
+    const ebId = genId('blk');
+    const eastBlock: Block = { id: ebId, segmentId: eastPortalSeg.id, startT: 0, endT: 1, length: 300, state: BlockState.CLEAR, failed: false };
+    eastPortalSeg.blockIds.push(ebId);
+
+    nodes.set(eastPortalNode.id, eastPortalNode);
+    segments.set(eastPortalSeg.id, eastPortalSeg);
+    blocks.set(ebId, eastBlock);
+
+    const portalEast: Portal = { id: genId('portal'), name: 'East Boundary', position: eastPortalNode.position, segmentId: eastPortalSeg.id };
+    portals.set(portalEast.id, portalEast);
+
+    // ──────────────────────────────────────────
     // STEP 9: Create ERU units
     // ──────────────────────────────────────────
 
@@ -1023,6 +1050,8 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
         routes,
         trains,
         stations,
+        portals,
+        schedule,
         failures,
         eruUnits,
         tasks,
@@ -1050,6 +1079,8 @@ function buildMinimalWorld(seed: string): GameWorld {
     const routes = new Map<EntityId, Route>();
     const trains = new Map<EntityId, Train>();
     const stations = new Map<EntityId, Station>();
+    const portals = new Map<EntityId, Portal>();
+    const schedule: SpawnSchedule[] = [];
 
     // Create two stations with one track between them
     const n1: TrackNode = { id: genId('node'), position: vec2(200, 400), connectedSegments: [] };
@@ -1157,7 +1188,7 @@ function buildMinimalWorld(seed: string): GameWorld {
     return {
         seed, opengenVersion: OPENGEN_VERSION,
         nodes, segments, blocks, signals, points, routes,
-        trains, stations,
+        trains, stations, portals, schedule,
         failures: new Map(),
         eruUnits: [{ id: genId('eru'), state: ERUState.AVAILABLE, eta: 0, repairTime: 0 }],
         tasks: [], time: 0, timeScale: 1,

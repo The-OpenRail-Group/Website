@@ -190,7 +190,29 @@ function updateTrains(world: GameWorld, dt: number): void {
                 // Find next segment
                 const endNode = world.nodes.get(segment.endNodeId);
                 if (endNode) {
-                    const nextSegId = endNode.connectedSegments.find(sid => sid !== segment.id);
+                    let nextSegId: EntityId | undefined;
+                    if (endNode.points) {
+                        const pts = endNode.points;
+                        if (segment.id === pts.commonSegmentId) {
+                            // Facing point
+                            if (pts.position === PointsPosition.NORMAL) {
+                                nextSegId = pts.normalSegmentId;
+                            } else if (pts.position === PointsPosition.REVERSE) {
+                                nextSegId = pts.reverseSegmentId;
+                            } else {
+                                // Points moving/unknown — derailment realistically. Just stop for now.
+                                nextSegId = undefined;
+                                train.speed = 0;
+                                train.state = TrainState.STALLED;
+                            }
+                        } else {
+                            // Trailing point
+                            nextSegId = pts.commonSegmentId;
+                        }
+                    } else {
+                        nextSegId = endNode.connectedSegments.find(sid => sid !== segment.id);
+                    }
+
                     if (nextSegId) {
                         const nextSeg = world.segments.get(nextSegId);
                         if (nextSeg) {
@@ -207,9 +229,35 @@ function updateTrains(world: GameWorld, dt: number): void {
                             train.speed = 0;
                         }
                     } else {
-                        // End of line
-                        train.position.t = 1.0;
-                        train.speed = 0;
+                        // End of line — check if it's a portal!
+                        let isPortal = false;
+                        for (const portal of Array.from(world.portals.values())) {
+                            if (portal.segmentId === segment.id || portal.segmentId === nextSegId) {
+                                isPortal = true;
+                                break;
+                            }
+                        }
+
+                        if (isPortal) {
+                            // Despawn train
+                            world.score += 500;
+                            world.trainsHandled += 1;
+                            world.trains.delete(train.id);
+
+                            // Let the block clear nicely
+                            const blks = segment.blockIds;
+                            if (blks && blks.length > 0) {
+                                const endBlock = world.blocks.get(blks[blks.length - 1]);
+                                if (endBlock) {
+                                    endBlock.state = BlockState.CLEAR;
+                                    endBlock.occupyingTrainId = undefined;
+                                }
+                            }
+                            return; // Stop processing this train
+                        } else {
+                            train.position.t = 1.0;
+                            train.speed = 0;
+                        }
                     }
                 }
             }

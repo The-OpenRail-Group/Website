@@ -273,6 +273,8 @@ export interface Train {
     headcode: string;
     /** Type of train */
     type: TrainType;
+    /** Portal the train is heading towards */
+    destinationPortalId?: EntityId;
     /** Length in metres — trains can span multiple blocks */
     length: number;
     /** Current speed in m/s */
@@ -353,7 +355,7 @@ export interface TimetableEntry {
 }
 
 // ============================================================
-// STATIONS
+// STATIONS & PORTALS
 // ============================================================
 
 export interface Station {
@@ -364,6 +366,30 @@ export interface Station {
     platformSegmentIds: EntityId[];
     /** Number of platforms */
     platformCount: number;
+}
+
+/**
+ * Portals represent the edge of the world where trains spawn and despawn.
+ * They act as sources and sinks for the network.
+ */
+export interface Portal {
+    id: EntityId;
+    name: string;
+    position: Vec2;
+    segmentId: EntityId;
+}
+
+export interface SpawnSchedule {
+    id: EntityId;
+    trainType: TrainType;
+    spawnTime: number; // Simulation seconds
+    sourcePortalId: EntityId;
+    destinationPortalId: EntityId;
+    maxSpeed: number;
+    length: number;
+    headcode: string;
+    color: string;
+    spawned: boolean;
 }
 
 // ============================================================
@@ -485,6 +511,10 @@ export interface GameWorld {
     trains: Map<EntityId, Train>;
     /** All stations */
     stations: Map<EntityId, Station>;
+    /** All portals (spawn/despawn points) */
+    portals: Map<EntityId, Portal>;
+    /** Scheduled trains yet to spawn */
+    schedule: SpawnSchedule[];
     /** Active failures */
     failures: Map<EntityId, Failure>;
     /** ERU units */
