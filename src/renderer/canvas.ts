@@ -356,7 +356,25 @@ export class Renderer {
                 ctx.fillStyle = glowColor;
                 ctx.globalAlpha = 0.15;
                 ctx.fill();
+
+                if (aspect === SignalAspect.DOUBLE_YELLOW) {
+                    ctx.beginPath();
+                    ctx.arc(position.x, position.y - 10, radius + 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
                 ctx.globalAlpha = 1;
+            }
+
+            // DOUBLE YELLOW extra light
+            if (aspect === SignalAspect.DOUBLE_YELLOW) {
+                ctx.beginPath();
+                ctx.arc(position.x, position.y - 10, radius, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS.signalYellow;
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
             }
 
             // Signal head fill
@@ -368,6 +386,7 @@ export class Renderer {
                     ctx.fillStyle = COLORS.signalRed;
                     break;
                 case SignalAspect.YELLOW:
+                case SignalAspect.DOUBLE_YELLOW:
                     ctx.fillStyle = COLORS.signalYellow;
                     break;
                 case SignalAspect.GREEN:

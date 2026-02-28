@@ -256,7 +256,7 @@ export function numericToTriplet(num: number): string {
 // OPENGEN VERSIONING
 // ============================================================
 
-export const OPENGEN_VERSION = '1.0.0';
+export const OPENGEN_VERSION = '2.0.0';
 
 export interface OpenGenManifest {
     version: string;
@@ -266,6 +266,7 @@ export interface OpenGenManifest {
 export const OPENGEN_CHANGELOG: OpenGenManifest = {
     version: OPENGEN_VERSION,
     changelog: [
+        'v2.0.0 — Major update. Improved map generation, depots, 4-aspect signals, manual signaller controls.',
         'v1.0.0 — Initial OpenGen release. Procedural junction and station generation.',
     ],
 };

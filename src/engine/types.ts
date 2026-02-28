@@ -141,6 +141,8 @@ export interface Signal {
     direction: Vec2;
     /** Current aspect */
     aspect: SignalAspect;
+    /** Whether the signaller has cleared this signal for passage */
+    cleared: boolean;
     /** Whether this signal has failed */
     failed: boolean;
     /** If failed, what it's stuck at */
@@ -154,6 +156,7 @@ export interface Signal {
 export enum SignalAspect {
     RED = 'RED',
     YELLOW = 'YELLOW',
+    DOUBLE_YELLOW = 'DOUBLE_YELLOW',
     GREEN = 'GREEN',
 }
 

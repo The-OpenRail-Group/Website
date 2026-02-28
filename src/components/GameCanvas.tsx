@@ -12,7 +12,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GameWorld, CameraState, Vec2, EntityId, Difficulty } from '../engine/types';
-import { simulationTick, requestRoute, cancelRoute, dispatchERU } from '../engine/simulation';
+import { simulationTick, requestRoute, cancelRoute, dispatchERU, toggleSignalClear, togglePoints } from '../engine/simulation';
 import { generateWorld } from '../opengen/generator';
 import { Renderer } from '../renderer/canvas';
 import styles from './GameCanvas.module.css';
@@ -339,17 +339,25 @@ export default function GameCanvas({ seed, difficulty, onBack }: GameCanvasProps
                 const signal = world.signals.get(hit.id);
                 if (!signal) break;
 
-                // Try to set a route through this signal
-                if (signal.routeIds.length > 0) {
-                    const routeId = signal.routeIds[0]; // First available route
-                    const result = requestRoute(world, routeId);
-                    if (!result.success) {
-                        addNotification(result.reason || 'Cannot set route');
-                        setExplainText(result.reason || 'Route cannot be set.');
-                        setShowExplainWhy(true);
-                    } else {
-                        addNotification('Route set');
-                    }
+                const result = toggleSignalClear(world, signal.id);
+                if (!result.success) {
+                    addNotification(result.reason || 'Cannot control signal');
+                    setExplainText(result.reason || 'Cannot control signal.');
+                    setShowExplainWhy(true);
+                }
+                break;
+            }
+            case 'points': {
+                const pts = world.points.get(hit.id);
+                if (!pts) break;
+
+                const result = togglePoints(world, pts.id);
+                if (!result.success) {
+                    addNotification(result.reason || 'Cannot switch points');
+                    setExplainText(result.reason || 'Cannot switch points.');
+                    setShowExplainWhy(true);
+                } else {
+                    addNotification(`Points set to ${pts.position}`);
                 }
                 break;
             }
@@ -393,6 +401,8 @@ export default function GameCanvas({ seed, difficulty, onBack }: GameCanvasProps
                     }
                 } else if (signal.aspect === 'YELLOW') {
                     explanation = `This signal is at YELLOW (Caution). The next signal ahead is at RED. Trains will slow down when approaching this signal.`;
+                } else if (signal.aspect === 'DOUBLE_YELLOW') {
+                    explanation = `This signal is at DOUBLE YELLOW (Preliminary Caution). The signal after next is at RED.`;
                 } else {
                     explanation = `This signal is at GREEN (Clear). The route ahead is clear and trains may proceed at line speed.`;
                 }
@@ -594,9 +604,9 @@ export default function GameCanvas({ seed, difficulty, onBack }: GameCanvasProps
                                         <span className={styles.fieldLabel}>Aspect</span>
                                         <span className={styles.fieldValue} style={{
                                             color: signal.aspect === 'RED' ? '#e53935' :
-                                                signal.aspect === 'YELLOW' ? '#fdd835' : '#43a047'
+                                                (signal.aspect === 'YELLOW' || signal.aspect === 'DOUBLE_YELLOW') ? '#fdd835' : '#43a047'
                                         }}>
-                                            {signal.aspect}
+                                            {signal.aspect.replace('_', ' ')}
                                         </span>
                                     </div>
                                     <div className={styles.entityField}>

@@ -18,7 +18,7 @@
 import {
     GameWorld, Train, Signal, Block, Route, Points, Failure,
     BlockState, SignalAspect, PointsPosition, RouteState,
-    TrainState, TrainType, FailureType, ERUState,
+    TrainState, TrainType, FailureType, ERUState, Difficulty,
     EntityId, Vec2,
 } from './types';
 import { vec2, vec2Lerp, vec2Dist, vec2Sub, vec2Normalize } from '../opengen/generator';
@@ -356,6 +356,12 @@ function updateSignalAspects(world: GameWorld): void {
             return;
         }
 
+        // New feature: manual signal clearing
+        if (!signal.cleared) {
+            signal.aspect = SignalAspect.RED;
+            return;
+        }
+
         // Check the protected block
         const protectedBlock = world.blocks.get(signal.protectedBlockId);
 
@@ -365,6 +371,8 @@ function updateSignalAspects(world: GameWorld): void {
             return;
         }
 
+        // 4-aspect signalling logic
+        // If the block immediately ahead is occupied → RED
         if (protectedBlock.state === BlockState.OCCUPIED) {
             signal.aspect = SignalAspect.RED;
             return;
@@ -386,11 +394,17 @@ function updateSignalAspects(world: GameWorld): void {
             return;
         }
 
-        // Check the next signal ahead — if it's RED, show YELLOW
+        // Check the next signal ahead
         const nextSignal = getNextSignalInDirection(world, signal);
-        if (nextSignal && nextSignal.aspect === SignalAspect.RED) {
-            signal.aspect = SignalAspect.YELLOW;
-            return;
+        if (nextSignal) {
+            if (nextSignal.aspect === SignalAspect.RED) {
+                signal.aspect = SignalAspect.YELLOW;
+                return;
+            }
+            if (nextSignal.aspect === SignalAspect.YELLOW) {
+                signal.aspect = SignalAspect.DOUBLE_YELLOW;
+                return;
+            }
         }
 
         signal.aspect = SignalAspect.GREEN;
@@ -644,6 +658,66 @@ export function cancelRoute(world: GameWorld, routeId: EntityId): { success: boo
 // ============================================================
 
 /**
+ * Toggles a signal's cleared status manually.
+ */
+export function toggleSignalClear(world: GameWorld, signalId: EntityId): { success: boolean; reason?: string } {
+    const signal = world.signals.get(signalId);
+    if (!signal) {
+        return { success: false, reason: 'Signal does not exist.' };
+    }
+
+    if (signal.failed) {
+        return { success: false, reason: 'Signal has failed and cannot be controlled.' };
+    }
+
+    signal.cleared = !signal.cleared;
+
+    // Optional: auto-request route when clearing
+    if (signal.cleared && signal.routeIds.length > 0) {
+        // Find best unsigned route
+        const availableRouteId = signal.routeIds.find(rid => {
+            const rt = world.routes.get(rid);
+            return rt && rt.state === RouteState.UNSET;
+        });
+        if (availableRouteId) {
+            requestRoute(world, availableRouteId);
+        }
+    }
+
+    return { success: true };
+}
+
+/**
+ * Manually flip a set of points (HARD difficulty mechanic).
+ */
+export function togglePoints(world: GameWorld, pointsId: EntityId): { success: boolean; reason?: string } {
+    const pts = world.points.get(pointsId);
+    if (!pts) {
+        return { success: false, reason: 'Points do not exist.' };
+    }
+
+    if (world.difficulty !== Difficulty.HARD) {
+        return { success: false, reason: 'Manual points control is only available on HARD difficulty.' };
+    }
+
+    if (pts.locked) {
+        return { success: false, reason: 'Points are rigidly locked by an active route interlocking.' };
+    }
+
+    if (pts.failed) {
+        return { success: false, reason: 'These points have failed and cannot be thrown manually.' };
+    }
+
+    if (pts.position === PointsPosition.NORMAL) {
+        pts.position = PointsPosition.REVERSE;
+    } else if (pts.position === PointsPosition.REVERSE) {
+        pts.position = PointsPosition.NORMAL;
+    }
+
+    return { success: true };
+}
+
+/**
  * Manually place a signal to danger (RED).
  * Used for emergency protection.
  */
@@ -657,6 +731,7 @@ export function placeSignalToDanger(world: GameWorld, signalId: EntityId): { suc
         return { success: false, reason: 'Signal has failed and cannot be controlled.' };
     }
 
+    signal.cleared = false;
     signal.aspect = SignalAspect.RED;
     return { success: true };
 }

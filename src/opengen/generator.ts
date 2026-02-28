@@ -273,18 +273,18 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
     const stationPositions: Vec2[] = [];
     const mainLineNodes: TrackNode[] = [];
 
-    // Main line runs roughly left-to-right with gentle curves
     let currentPos = vec2(200, 400);
-    const mainDirection = vec2(1, 0);
+    let angle = 0;
 
-    // Create a gentle curved main line
+    // Create a winding main line instead of a staircase
     for (let i = 0; i < params.stationCount; i++) {
-        // Add some vertical variation for visual interest
-        const yOffset = rng.gaussian(0, 60);
-        const spacing = params.segmentSpacing + rng.gaussian(0, 50);
-
         if (i > 0) {
-            currentPos = vec2Add(currentPos, vec2(spacing, yOffset));
+            angle += rng.range(-Math.PI / 3, Math.PI / 3);
+            if (angle > Math.PI / 2.5) angle = Math.PI / 2.5;
+            if (angle < -Math.PI / 2.5) angle = -Math.PI / 2.5;
+
+            const spacing = params.segmentSpacing + rng.range(-50, 150);
+            currentPos = vec2Add(currentPos, vec2(Math.cos(angle) * spacing, Math.sin(angle) * spacing));
         }
 
         stationPositions.push({ ...currentPos });
@@ -665,6 +665,19 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
     // - At regular intervals on running lines
     // - Bidirectional lines get signals in both directions
 
+    const placeSignalIfClear = (sig: Signal) => {
+        // Prevent signal overlapping: check distance to other signals
+        let overlap = false;
+        signals.forEach(existing => {
+            if (vec2Dist(existing.position, sig.position) < 30) {
+                overlap = true;
+            }
+        });
+        if (!overlap) {
+            signals.set(sig.id, sig);
+        }
+    };
+
     // Place signals at station entries
     stationLayouts.forEach((layout) => {
         // Entry signal
@@ -680,6 +693,7 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
                 positionT: 0.95,
                 direction: entryDir,
                 aspect: SignalAspect.RED,
+                cleared: false,
                 failed: false,
                 routeIds: [],
                 protectedBlockId: '',
@@ -691,7 +705,7 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
                 entrySignal.protectedBlockId = seg.blockIds[0];
             }
 
-            signals.set(entrySignalId, entrySignal);
+            placeSignalIfClear(entrySignal);
         }
 
         // Exit signal
@@ -712,6 +726,7 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
                 positionT: 0.05,
                 direction: exitDir,
                 aspect: SignalAspect.RED,
+                cleared: false,
                 failed: false,
                 routeIds: [],
                 protectedBlockId: '',
@@ -722,7 +737,7 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
                 exitSignal.protectedBlockId = seg.blockIds[0];
             }
 
-            signals.set(exitSignalId, exitSignal);
+            placeSignalIfClear(exitSignal);
         }
 
         // Platform exit signals (starter signals)
@@ -739,11 +754,12 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
                 positionT: 0.9,
                 direction: dir,
                 aspect: SignalAspect.RED,
+                cleared: false,
                 failed: false,
                 routeIds: [],
                 protectedBlockId: platSeg.blockIds[0] || '',
             };
-            signals.set(starterSignalId, starterSignal);
+            placeSignalIfClear(starterSignal);
         });
     });
 
@@ -772,11 +788,12 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
                 positionT: 0.05,
                 direction: dir,
                 aspect: SignalAspect.GREEN,
+                cleared: false,
                 failed: false,
                 routeIds: [],
                 protectedBlockId: seg.blockIds[0] || '',
             };
-            signals.set(sigId, sig);
+            placeSignalIfClear(sig);
         }
     });
 
@@ -890,10 +907,25 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
 
     const trainCount = Math.max(2, Math.round(params.stationCount * params.trainsPerStation));
     const stationArr = Array.from(stations.values());
+    const usedBlocks = new Set<EntityId>();
 
-    for (let ti = 0; ti < trainCount; ti++) {
+    let placedTrains = 0;
+
+    for (let ti = 0; ti < trainCount * 2; ti++) { // allow more attempts
+        if (placedTrains >= trainCount) break;
+
         const originStation = stationArr[ti % stationArr.length];
-        const originPlatSeg = originStation.platformSegmentIds[0];
+
+        // Pick a platform that isn't already used for spawning
+        const availablePlatforms = originStation.platformSegmentIds.filter(pid => {
+            const segTemp = segments.get(pid);
+            if (!segTemp || segTemp.blockIds.length === 0) return false;
+            return !usedBlocks.has(segTemp.blockIds[0]);
+        });
+
+        if (availablePlatforms.length === 0) continue; // Skip to next attempt
+
+        const originPlatSeg = availablePlatforms[0];
         const seg = segments.get(originPlatSeg);
         if (!seg) continue;
 
@@ -955,12 +987,14 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
         }
 
         trains.set(trainId, train);
+        placedTrains++;
 
         // Mark starting block as occupied
         const startBlock = blocks.get(seg.blockIds[0]);
         if (startBlock) {
             startBlock.state = BlockState.OCCUPIED;
             startBlock.occupyingTrainId = trainId;
+            usedBlocks.add(startBlock.id);
         }
     }
 
@@ -1088,12 +1122,12 @@ function buildMinimalWorld(seed: string): GameWorld {
     // Signals
     const sig1: Signal = {
         id: genId('sig'), position: vec2(480, 385), segmentId: s1.id,
-        positionT: 0.9, direction: vec2(1, 0), aspect: SignalAspect.RED,
+        positionT: 0.9, direction: vec2(1, 0), aspect: SignalAspect.RED, cleared: false,
         failed: false, routeIds: [], protectedBlockId: s2.blockIds[0] || '',
     };
     const sig2: Signal = {
         id: genId('sig'), position: vec2(780, 385), segmentId: s2.id,
-        positionT: 0.9, direction: vec2(1, 0), aspect: SignalAspect.GREEN,
+        positionT: 0.9, direction: vec2(1, 0), aspect: SignalAspect.GREEN, cleared: false,
         failed: false, routeIds: [], protectedBlockId: s3.blockIds[0] || '',
     };
 
