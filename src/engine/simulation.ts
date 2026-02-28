@@ -19,7 +19,7 @@ import {
     GameWorld, Train, Signal, Block, Route, Points, Failure,
     BlockState, SignalAspect, PointsPosition, RouteState,
     TrainState, TrainType, FailureType, ERUState, Difficulty,
-    EntityId, Vec2,
+    EntityId, Vec2, Portal, SpawnSchedule
 } from './types';
 import { vec2, vec2Lerp, vec2Dist, vec2Sub, vec2Normalize } from '../opengen/generator';
 import { SeededRNG } from '../opengen/seed';
@@ -56,8 +56,80 @@ export function simulationTick(world: GameWorld, dt: number): void {
     // 6. Check for random failures (rare)
     checkForFailures(world, scaledDt);
 
-    // 7. Update score
+    // 7. Process Spawn Schedule
+    processSpawns(world);
+
+    // 8. Update score
     updateScore(world, scaledDt);
+}
+
+// ============================================================
+// DYNAMIC SPAWNING
+// ============================================================
+
+function processSpawns(world: GameWorld): void {
+    const time = world.time;
+
+    for (const entry of world.schedule) {
+        if (!entry.spawned && time >= entry.spawnTime) {
+            const portal = world.portals.get(entry.sourcePortalId);
+            if (!portal) {
+                entry.spawned = true; // Portal missing, skip
+                continue;
+            }
+
+            // Check if the portal's segment block is clear
+            const segment = world.segments.get(portal.segmentId);
+            if (!segment || segment.blockIds.length === 0) continue;
+
+            const entryBlock = world.blocks.get(segment.blockIds[segment.blockIds.length - 1]); // Assume last block is at the edge
+            if (!entryBlock) continue;
+
+            if (entryBlock.state === BlockState.CLEAR) {
+                // We can spawn!
+                const train: Train = {
+                    id: entry.id,
+                    headcode: entry.headcode,
+                    type: entry.trainType,
+                    length: entry.length,
+                    speed: entry.maxSpeed * 0.5, // Start moving at half speed
+                    maxSpeed: entry.maxSpeed,
+                    acceleration: entry.trainType === TrainType.FREIGHT ? 0.3 : 0.8,
+                    brakingRate: entry.trainType === TrainType.FREIGHT ? 0.4 : 1.2,
+                    emergencyBrakingRate: entry.trainType === TrainType.FREIGHT ? 0.8 : 2.5,
+                    destinationPortalId: entry.destinationPortalId,
+                    position: {
+                        segmentId: portal.segmentId,
+                        t: 1.0, // Start exactly at the end of the segment (entering the world backwards from portal perspective if portal is at end)
+                        // Actually, let's normalize this: portals should inject at t=0 or t=1. Let's assume portal nodes inject at t=0 for now.
+                        worldPos: portal.position,
+                    },
+                    path: [{ segmentId: portal.segmentId, forward: true }],
+                    pathIndex: 0,
+                    state: TrainState.RUNNING,
+                    timetable: [], // Spawns don't need fixed timetables for now, they use destinations
+                    delay: 0,
+                    spad: false,
+                    color: entry.color,
+                };
+
+                // If portal is at the endNode of the segment, we need to inject coming backwards
+                const portalNode = world.nodes.get(segment.endNodeId);
+                if (portalNode && portalNode.position.x === portal.position.x && portalNode.position.y === portal.position.y) {
+                    train.position.t = 1.0;
+                    train.path[0].forward = false;
+                } else {
+                    train.position.t = 0.0;
+                    train.path[0].forward = true;
+                }
+
+                world.trains.set(train.id, train);
+                entry.spawned = true;
+                entryBlock.state = BlockState.OCCUPIED;
+                entryBlock.occupyingTrainId = train.id;
+            }
+        }
+    }
 }
 
 // ============================================================
@@ -229,18 +301,23 @@ function updateTrains(world: GameWorld, dt: number): void {
                             train.speed = 0;
                         }
                     } else {
-                        // End of line — check if it's a portal!
-                        let isPortal = false;
+                        let hitPortal: Portal | null = null;
                         for (const portal of Array.from(world.portals.values())) {
                             if (portal.segmentId === segment.id || portal.segmentId === nextSegId) {
-                                isPortal = true;
+                                hitPortal = portal;
                                 break;
                             }
                         }
 
-                        if (isPortal) {
+                        if (hitPortal) {
                             // Despawn train
-                            world.score += 500;
+                            if (train.destinationPortalId === hitPortal.id) {
+                                // Correct destination
+                                world.score += 500;
+                            } else {
+                                // Wrong destination! Serious penalty!
+                                world.score -= 2000;
+                            }
                             world.trainsHandled += 1;
                             world.trains.delete(train.id);
 

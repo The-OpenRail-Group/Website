@@ -157,6 +157,7 @@ export class Renderer {
         this.renderPoints(world);
         this.renderSignals(world);
         this.renderStations(world);
+        this.renderPortals(world);
         this.renderTrains(world);
         this.renderRouteIndicators(world);
 
@@ -611,6 +612,31 @@ export class Renderer {
                 ctx.fillStyle = '#404040';
                 ctx.fillText(`P${i + 1}`, midX, midY + 18);
             });
+        });
+    }
+
+    // ──────────────────────────────────────────
+    // PORTALS
+    // ──────────────────────────────────────────
+
+    private renderPortals(world: GameWorld): void {
+        const ctx = this.ctx;
+
+        world.portals.forEach(portal => {
+            const pos = portal.position;
+
+            // Draw portal block edge
+            ctx.fillStyle = '#1e3a8a'; // distinct blue for world edges
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.font = `${9 / Math.max(this.camera.zoom, 0.5)}px "Inter", "Segoe UI", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#60a5fa'; // lighter blue text
+            ctx.fillText(portal.name, pos.x, pos.y - 15);
         });
     }
 

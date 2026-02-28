@@ -640,10 +640,79 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
     }
 
     // ──────────────────────────────────────────
+    // STEP 3.5: Create South Branch
+    // ──────────────────────────────────────────
+
+    // Find a nice middle station layout to branch off from its exit node
+    if (stationLayouts.length > 3) {
+        const midIndex = Math.floor(stationLayouts.length / 2);
+        const branchLayout = stationLayouts[midIndex];
+
+        // We will branch off AFTER the exit junction.
+        // Wait, the exitNode connects to the next station's running line!
+        // The running line is finalSegId or midNode seg.
+
+        // Find the segment leaving exitNode towards the East
+        const mainLineSegId = branchLayout.exitNode.connectedSegments.find(sid => {
+            const seg = segments.get(sid);
+            return seg && !seg.isPlatform && seg.endNodeId !== branchLayout.exitNode.id; // Leaving this node
+        });
+
+        if (mainLineSegId) {
+            const mainLineSeg = segments.get(mainLineSegId)!;
+
+            // Set up Points at the exitNode to split to the branch
+            const branchStartPos = branchLayout.exitNode.position;
+            const branchEndPos = vec2Add(branchStartPos, vec2(100, 300)); // Go South
+
+            const branchPortalNode: TrackNode = { id: genId('node'), position: branchEndPos, connectedSegments: [] };
+            nodes.set(branchPortalNode.id, branchPortalNode);
+
+            const branchSeg: TrackSegment = {
+                id: genId('seg'), startNodeId: branchLayout.exitNode.id, endNodeId: branchPortalNode.id,
+                length: vec2Dist(branchStartPos, branchEndPos), speedLimit: 60, waypoints: [], blockIds: [], isPlatform: false, electrified: true
+            };
+            segments.set(branchSeg.id, branchSeg);
+            branchPortalNode.connectedSegments.push(branchSeg.id);
+            branchLayout.exitNode.connectedSegments.push(branchSeg.id);
+
+            // Create points for the junction
+            // Find the throat segment coming into the exitNode from the station
+            const throatSegId = branchLayout.exitNode.connectedSegments.find(sid => sid !== mainLineSegId && sid !== branchSeg.id);
+
+            if (throatSegId) {
+                const branchPoints: Points = {
+                    id: genId('pts'),
+                    nodeId: branchLayout.exitNode.id,
+                    position: PointsPosition.NORMAL,
+                    locked: false,
+                    failed: false,
+                    normalSegmentId: mainLineSegId,
+                    reverseSegmentId: branchSeg.id,
+                    commonSegmentId: throatSegId,
+                    health: 100,
+                };
+                points.set(branchPoints.id, branchPoints);
+                branchLayout.exitNode.points = branchPoints;
+            }
+
+            // Create South Portal
+            const sbId = genId('blk');
+            const southBlock: Block = { id: sbId, segmentId: branchSeg.id, startT: 0, endT: 1, length: branchSeg.length, state: BlockState.CLEAR, failed: false };
+            branchSeg.blockIds.push(sbId);
+            blocks.set(sbId, southBlock);
+
+            const portalSouth: Portal = { id: genId('portal'), name: 'South Branch Boundary', position: branchPortalNode.position, segmentId: branchSeg.id };
+            portals.set(portalSouth.id, portalSouth);
+        }
+    }
+
+    // ──────────────────────────────────────────
     // STEP 4: Create blocks for all segments
     // ──────────────────────────────────────────
 
     segments.forEach((seg) => {
+        if (seg.blockIds.length > 0) return; // Skip if already blocked (like our portals)
         const blockId = genId('blk');
         const block: Block = {
             id: blockId,
@@ -992,19 +1061,44 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
         trains.set(trainId, train);
         placedTrains++;
 
+        // We don't spawn static trains anymore!
         // Mark starting block as occupied
+        /*
         const startBlock = blocks.get(seg.blockIds[0]);
         if (startBlock) {
             startBlock.state = BlockState.OCCUPIED;
             startBlock.occupyingTrainId = trainId;
             usedBlocks.add(startBlock.id);
         }
+        */
     }
 
     // ──────────────────────────────────────────
-    // STEP 8.5: Create Exit Portals
+    // STEP 8.5: Create Exit/Entry Portals & Schedule
     // ──────────────────────────────────────────
 
+    // West Portal (Entry)
+    const firstLayout = stationLayouts[0];
+    const westPortalNode: TrackNode = { id: genId('node'), position: vec2Add(firstLayout.entryNode.position, vec2(-300, 0)), connectedSegments: [] };
+    const westPortalSeg: TrackSegment = {
+        id: genId('seg'), startNodeId: westPortalNode.id, endNodeId: firstLayout.entryNode.id,
+        length: 300, speedLimit: 80, waypoints: [], blockIds: [], isPlatform: false, electrified: true
+    };
+    westPortalNode.connectedSegments.push(westPortalSeg.id);
+    firstLayout.entryNode.connectedSegments.push(westPortalSeg.id);
+
+    const wbId = genId('blk');
+    const westBlock: Block = { id: wbId, segmentId: westPortalSeg.id, startT: 0, endT: 1, length: 300, state: BlockState.CLEAR, failed: false };
+    westPortalSeg.blockIds.push(wbId);
+
+    nodes.set(westPortalNode.id, westPortalNode);
+    segments.set(westPortalSeg.id, westPortalSeg);
+    blocks.set(wbId, westBlock);
+
+    const portalWest: Portal = { id: genId('portal'), name: 'West Boundary', position: westPortalNode.position, segmentId: westPortalSeg.id };
+    portals.set(portalWest.id, portalWest);
+
+    // East Portal (Exit)
     const lastLayout = stationLayouts[stationLayouts.length - 1];
     const eastPortalNode: TrackNode = { id: genId('node'), position: vec2Add(lastLayout.exitNode.position, vec2(300, 0)), connectedSegments: [] };
     const eastPortalSeg: TrackSegment = {
@@ -1024,6 +1118,37 @@ function buildWorld(rng: SeededRNG, params: WorldParams, seed: string): GameWorl
 
     const portalEast: Portal = { id: genId('portal'), name: 'East Boundary', position: eastPortalNode.position, segmentId: eastPortalSeg.id };
     portals.set(portalEast.id, portalEast);
+
+    // Schedule trains to spawn from West Portal
+    const spawnCount = Math.max(10, Math.round(params.stationCount * params.trainsPerStation * 2));
+
+    // Check if south portal exists
+    const portalSouth = Array.from(portals.values()).find(p => p.name === 'South Branch Boundary');
+
+    for (let si = 0; si < spawnCount; si++) {
+        const isFreight = rng.chance(params.freightRatio);
+
+        let destId = portalEast.id;
+        if (portalSouth && rng.chance(0.3)) {
+            destId = portalSouth.id; // 30% of trains go to South branch if it exists
+        }
+
+        schedule.push({
+            id: genId('trn'),
+            trainType: isFreight ? TrainType.FREIGHT : TrainType.PASSENGER,
+            spawnTime: 30 + (si * rng.int(60, 180)), // Spawn a train every 1-3 minutes roughly
+            sourcePortalId: portalWest.id,
+            destinationPortalId: destId,
+            maxSpeed: isFreight ? rng.range(15, 25) : rng.range(30, 45),
+            length: isFreight ? rng.range(150, 300) : rng.range(60, 160),
+            headcode: generateHeadcode(rng),
+            color: TRAIN_COLORS[si % TRAIN_COLORS.length],
+            spawned: false,
+        });
+    }
+
+    // Sort schedule by spawn time ascending
+    schedule.sort((a, b) => a.spawnTime - b.spawnTime);
 
     // ──────────────────────────────────────────
     // STEP 9: Create ERU units

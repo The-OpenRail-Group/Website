@@ -416,9 +416,14 @@ export default function GameCanvas({ seed, difficulty, onBack }: GameCanvasProps
                 const segment = world.segments.get(train.position.segmentId);
                 const station = segment?.stationId ? world.stations.get(segment.stationId) : null;
 
+                const destPortal = train.destinationPortalId ? world.portals.get(train.destinationPortalId) : null;
+
                 explanation = `Train ${train.headcode} (${train.type.toLowerCase().replace('_', ' ')}).\n`;
                 explanation += `Speed: ${(train.speed * 3.6).toFixed(0)} km/h\n`;
                 explanation += `State: ${train.state.toLowerCase().replace(/_/g, ' ')}\n`;
+                if (destPortal) {
+                    explanation += `Destination: ${destPortal.name}\n`;
+                }
 
                 if (train.delay > 0) {
                     explanation += `Delay: ${Math.floor(train.delay / 60)} minutes ${Math.floor(train.delay % 60)} seconds late\n`;
@@ -583,6 +588,12 @@ export default function GameCanvas({ seed, difficulty, onBack }: GameCanvasProps
                                         <span className={styles.fieldLabel}>State</span>
                                         <span className={styles.fieldValue}>{train.state.replace(/_/g, ' ')}</span>
                                     </div>
+                                    {train.destinationPortalId && worldRef.current.portals.get(train.destinationPortalId) && (
+                                        <div className={styles.entityField}>
+                                            <span className={styles.fieldLabel}>Dst</span>
+                                            <span className={styles.fieldValue}>{worldRef.current.portals.get(train.destinationPortalId)?.name || 'Unknown'}</span>
+                                        </div>
+                                    )}
                                     {train.delay > 0 && (
                                         <div className={styles.entityField}>
                                             <span className={styles.fieldLabel}>Delay</span>
