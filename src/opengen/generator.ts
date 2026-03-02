@@ -1,27 +1,3 @@
-/**
- * OpenGen World Generator
- * 
- * Generates complete, valid railway networks from a seed.
- * 
- * SAFETY GUARANTEES (NON-NEGOTIABLE):
- * - No un-signalled junctions
- * - No facing points without protection
- * - No bidirectional lines without opposing signals
- * - Every route is interlockable
- * - Invalid layouts are discarded and regenerated
- * 
- * Generation Pipeline:
- * 1. Parse seed → create deterministic RNG
- * 2. Generate backbone track layout
- * 3. Add junctions and branches
- * 4. Place stations with platforms
- * 5. Place signals at all required locations
- * 6. Create blocks (track circuits)
- * 7. Build interlocking routes
- * 8. Validate entire layout
- * 9. If invalid → regenerate with modified seed
- */
-
 import {
     GameWorld, TrackNode, TrackSegment, Block, Signal, Points,
     Route, Station, Train, Vec2, EntityId,
